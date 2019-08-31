@@ -1,10 +1,11 @@
-import urllib.request
+import json
+import re
 import urllib.error
-from lxml import html, etree
+import urllib.request
+
 from bs4 import BeautifulSoup
 from flask import Response
-import re
-import json
+from lxml import html, etree
 
 target_url = 'https://habr.com'
 
