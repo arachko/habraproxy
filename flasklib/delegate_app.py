@@ -14,7 +14,7 @@ def href_update_lxml(full_html):
     tree = html.fromstring(full_html)
     for i in range(len(tree.xpath('//*[@href]'))):
         url = tree.xpath('//*[@href]')[i].get('href')
-        url_to_local = 'https://habr.com/ru/'
+        url_to_local = 'https://habr.com/'
         if url.startswith(url_to_local):
             tree.xpath('//*[@href]')[i].set('href', f'http://127.0.0.1:5000/{url[len(url_to_local)::]}')
     return etree.tostring(tree)
