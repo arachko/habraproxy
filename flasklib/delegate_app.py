@@ -10,15 +10,18 @@ from lxml import html, etree
 target_url = 'https://habr.com'
 
 
-def href_update_lxml(tree):
+def href_update_lxml(full_html):
+    tree = html.fromstring(full_html)
     for i in range(len(tree.xpath('//*[@href]'))):
         url = tree.xpath('//*[@href]')[i].get('href')
         url_to_local = 'https://habr.com/ru/'
         if url.startswith(url_to_local):
             tree.xpath('//*[@href]')[i].set('href', f'http://127.0.0.1:5000/{url[len(url_to_local)::]}')
+    return etree.tostring(tree)
 
 
-def text_update_soup(soup):
+def text_update_soup(full_html):
+    soup = BeautifulSoup(full_html)
     reg = re.compile('\w')
     tags = ['h1', 'p', 'a', 'h2', 'h3', 'span', 'br', 'div', 'li', 'ul', '#text']
     for elem_g in soup.find_all({tag: True for tag in tags}):
@@ -28,8 +31,8 @@ def text_update_soup(soup):
                 for i in range(len(text_list)):
                     if len(text_list[i]) == 6 and not re.search('\W', text_list[i]):
                         text_list[i] += '™'
-                i = ' '.join(text_list)
-                elem_l.replaceWith(i)
+                elem_l.replaceWith(' '.join(text_list))
+    return soup.prettify("utf-8")
 
 
 def query_params(url, params):
@@ -56,13 +59,10 @@ def habr(request, uris=[]):
             urllib.request.Request(url=url, method='GET')
         ).read()
 
-        tree = html.fromstring(full_html)
-        href_update_lxml(tree)
+        html_updated_href = href_update_lxml(full_html)
+        html_fully_updated = text_update_soup(html_updated_href)
 
-        soup = BeautifulSoup(etree.tostring(tree))
-        text_update_soup(soup)
-
-        return Response(soup.prettify("utf-8"),
+        return Response(html_fully_updated,
                         headers={"Content-Type": "text/html", "Access-Control-Allow-Origin": "*"})
 
     except urllib.error.HTTPError as e:
