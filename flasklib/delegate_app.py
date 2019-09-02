@@ -1,17 +1,18 @@
-import json
+import html.parser
 import re
 import urllib.error
 import urllib.request
 
 from bs4 import BeautifulSoup
 from flask import Response
-from lxml import html, etree
+from lxml import html as lhtml, etree
 
 target_url = 'https://habr.com'
 
 
 def href_update_lxml(full_html):
-    tree = html.fromstring(full_html)
+    full_html = full_html.decode('utf-8').replace('xlink', 'link').encode('utf-8')
+    tree = lhtml.fromstring(full_html)
     for i in range(len(tree.xpath('//*[@href]'))):
         url = tree.xpath('//*[@href]')[i].get('href')
         url_to_local = 'https://habr.com/'
@@ -23,13 +24,16 @@ def href_update_lxml(full_html):
 def text_update_soup(full_html):
     soup = BeautifulSoup(full_html)
     reg = re.compile('\w')
-    tags = ['h1', 'p', 'a', 'h2', 'h3', 'span', 'br', 'div', 'li', 'ul', '#text']
+    tags = ['div', 'a', 'h1', 'h2', 'h3', 'p', 'span', 'li', 'ul']
     for elem_g in soup.find_all({tag: True for tag in tags}):
         for elem_l in elem_g.find_all(text=reg):
             if len(re.findall(r'\b\w[a-zA-Zа-яА-Я]{5}\b', elem_l)) > 0:
                 text_list = elem_l.split(' ')
                 for i in range(len(text_list)):
-                    if len(text_list[i]) == 6 and not re.search('\W', text_list[i]):
+                    if text_list[i].endswith('\n'):
+                        text_list[i] = text_list[i].replace('\n', '')
+                    js_excl = ['images', 'script']
+                    if len(text_list[i]) == 6 and not re.search('\W', text_list[i]) and text_list[i] not in js_excl:
                         text_list[i] += '™'
                 elem_l.replaceWith(' '.join(text_list))
     return soup.prettify("utf-8")
@@ -55,20 +59,24 @@ def habr(request, uris=[]):
     if request_query_params:
         url = query_params(url, request_query_params)
     try:
-        full_html = urllib.request.urlopen(
+        response = urllib.request.urlopen(
             urllib.request.Request(url=url, method='GET')
-        ).read()
+        )
 
-        html_updated_href = href_update_lxml(full_html)
-        html_fully_updated = text_update_soup(html_updated_href)
+        response_data = response.read()
+        if response_data.startswith(b'<!DOCTYPE html>'):
+            response_data = href_update_lxml(response_data)
+            response_data = text_update_soup(response_data)
 
-        return Response(html_fully_updated,
-                        headers={"Content-Type": "text/html", "Access-Control-Allow-Origin": "*"})
+            parser = html.parser.HTMLParser()
+            response_data = parser.unescape(response_data.decode('utf-8'))
+
+        return Response(response_data,
+                        headers={"Content-Type": response.headers.get_all('Content-Type'),
+                                 "Access-Control-Allow-Origin": "*"})
 
     except urllib.error.HTTPError as e:
-        error_message = json.loads(e.read())
-        print(f'an error occurred while getting target page, error_response={error_message}')
-        return Response('an error occurred while getting target page', headers={"Content-Type": "text/plain"})
+        return Response(e.read(), headers={"Content-Type": e.headers.get_all('Content-Type')})
 
     except Exception as e:
         print(f'internal server error, error={e}')
