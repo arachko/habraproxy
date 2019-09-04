@@ -7,6 +7,8 @@ from bs4 import BeautifulSoup
 from flask import Response
 from lxml import html as lhtml, etree
 
+from flasklib.svg_path import svg_path
+
 target_url = 'https://habr.com'
 
 
@@ -21,21 +23,43 @@ def href_update_lxml(full_html):
     return etree.tostring(tree)
 
 
-def text_update_soup(full_html):
-    soup = BeautifulSoup(full_html)
-    reg = re.compile('\w')
-    tags = ['div', 'a', 'h1', 'h2', 'h3', 'p', 'span', 'li', 'ul']
-    for elem_g in soup.find_all({tag: True for tag in tags}):
-        for elem_l in elem_g.find_all(text=reg):
+def habr_words_update(soup):
+    tags_list = ['div', 'a', 'h1', 'h2', 'h3', 'p', 'span', 'li', 'ul']
+    for elem_g in soup.find_all({tag: True for tag in tags_list}):
+        for elem_l in elem_g.find_all(text=re.compile('\w')):
             if len(re.findall(r'\b\w[a-zA-Zа-яА-Я]{5}\b', elem_l)) > 0:
-                text_list = elem_l.split(' ')
+                if '™' in elem_l or 'function' in elem_l or 'window' in elem_l or 'config' in elem_l:
+                    break
+                el_copy = str(elem_l)
+                text_list = re.findall(r'\b\w[a-zA-Zа-яА-Я]{5}\b', elem_l)
                 for i in range(len(text_list)):
                     if text_list[i].endswith('\n'):
                         text_list[i] = text_list[i].replace('\n', '')
-                    js_excl = ['images', 'script']
-                    if len(text_list[i]) == 6 and not re.search('\W', text_list[i]) and text_list[i] not in js_excl:
-                        text_list[i] += '™'
-                elem_l.replaceWith(' '.join(text_list))
+                    if len(text_list[i]) == 6 and not re.search('\W', text_list[i]):
+                        el_copy = re.sub(r'\b%s\b' % text_list[i], f'{text_list[i]}™', el_copy)
+                elem_l.replaceWith(el_copy)
+
+
+def habr_code_str_update(soup):
+    for code in soup.find_all('code'):
+        code.replaceWith(str(code))
+
+
+def habr_tags_update(soup):
+    svg_names = ['eye', 'comment', 'vote-arrow', 'book', 'arrow-bold', 'slug', 'anchor', 'tree', 'rounded-arrow']
+    for use in soup.find_all('use'):
+        for svg in svg_names:
+            if f'svg#{svg}' in str(use):
+                use.replaceWith(svg_path[f'svg_{svg}'])
+
+
+def text_update_soup(full_html):
+    soup = BeautifulSoup(full_html)
+
+    habr_words_update(soup)
+    habr_code_str_update(soup)
+    habr_tags_update(soup)
+
     return soup.prettify("utf-8")
 
 
